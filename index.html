@@ -147,12 +147,20 @@
         `;
     }
 
-    function getCurrentLiffUrl() {
-        return window.location.href;
+    function getLiffUrl() {
+        const url = new URL("https://liff.line.me/" + LIFF_ID);
+
+        url.searchParams.set("type", "video");
+        url.searchParams.set("videoUrl", videoUrl);
+        url.searchParams.set("previewUrl", previewUrl);
+        url.searchParams.set("aspectRatio", aspectRatio);
+        url.searchParams.set("fit", fit);
+
+        return url.toString();
     }
 
     function buildFlexMessage() {
-        const liffUrl = getCurrentLiffUrl();
+        const liffUrl = getLiffUrl();
 
         return {
             type: "flex",
