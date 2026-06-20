@@ -115,7 +115,33 @@
 <script>
     const LIFF_ID = "2009302184-0a7wKvsz";
 
-    const params = new URLSearchParams(window.location.search);
+    function getMergedParams() {
+        const finalParams = new URLSearchParams(window.location.search);
+
+        const liffState = finalParams.get("liff.state");
+
+        if (liffState) {
+            let stateText = decodeURIComponent(liffState);
+
+            if (stateText.startsWith("/")) {
+                stateText = stateText.substring(1);
+            }
+
+            if (stateText.startsWith("?")) {
+                stateText = stateText.substring(1);
+            }
+
+            const stateParams = new URLSearchParams(stateText);
+
+            stateParams.forEach(function (value, key) {
+                finalParams.set(key, value);
+            });
+        }
+
+        return finalParams;
+    }
+
+    const params = getMergedParams();
 
     const videoUrl = params.get("videoUrl");
     const previewUrl = params.get("previewUrl") || "https://dummyimage.com/1280x720/000000/ffffff.png&text=VIDEO";
@@ -260,7 +286,11 @@
     }
 
     if (!videoUrl) {
-        showError("沒有影片網址<br>請從 LINE Bot 產生影片滿版連結");
+        showError(
+            "沒有影片網址<br>" +
+            "請從 LINE Bot 產生影片滿版連結<br><br>" +
+            "如果你是剛剛更新程式，請重新產生一張新的影片卡片。"
+        );
     } else {
         video.src = videoUrl;
 
