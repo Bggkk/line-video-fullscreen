@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>影片滿版播放</title>
 
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
     <style>
         html,
         body {
@@ -14,6 +16,7 @@
             height: 100%;
             background: #000;
             overflow: hidden;
+            font-family: Arial, "Microsoft JhengHei", sans-serif;
         }
 
         #videoPlayer {
@@ -35,11 +38,55 @@
             position: fixed;
             left: 0;
             right: 0;
-            bottom: 18px;
+            bottom: 76px;
             text-align: center;
             color: rgba(255, 255, 255, 0.75);
             font-size: 14px;
             pointer-events: none;
+        }
+
+        #shareBar {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: 18px;
+            display: none;
+            gap: 10px;
+            z-index: 999;
+        }
+
+        .btn {
+            flex: 1;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 10px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        #shareBtn {
+            background: #06C755;
+        }
+
+        #playBtn {
+            background: rgba(255, 255, 255, 0.18);
+            backdrop-filter: blur(6px);
+        }
+
+        #toast {
+            position: fixed;
+            left: 20px;
+            right: 20px;
+            top: 20px;
+            display: none;
+            background: rgba(0, 0, 0, 0.78);
+            color: #fff;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.5;
+            z-index: 1000;
         }
     </style>
 </head>
@@ -58,15 +105,39 @@
 
 <div id="hint" style="display:none;">點一下影片可播放 / 暫停</div>
 
+<div id="shareBar">
+    <button id="playBtn" class="btn">播放 / 暫停</button>
+    <button id="shareBtn" class="btn">分享影片卡片</button>
+</div>
+
+<div id="toast"></div>
+
 <script>
+    const LIFF_ID = "2009302184-0a7wKvsz";
+
     const params = new URLSearchParams(window.location.search);
 
     const videoUrl = params.get("videoUrl");
+    const previewUrl = params.get("previewUrl") || "https://dummyimage.com/1280x720/000000/ffffff.png&text=VIDEO";
     const fit = params.get("fit") || "cover";
+    const aspectRatio = params.get("aspectRatio") || "16:9";
 
     const loadingBox = document.getElementById("loadingBox");
     const video = document.getElementById("videoPlayer");
     const hint = document.getElementById("hint");
+    const shareBar = document.getElementById("shareBar");
+    const shareBtn = document.getElementById("shareBtn");
+    const playBtn = document.getElementById("playBtn");
+    const toast = document.getElementById("toast");
+
+    function showToast(message) {
+        toast.innerHTML = message;
+        toast.style.display = "block";
+
+        setTimeout(function () {
+            toast.style.display = "none";
+        }, 2600);
+    }
 
     function showError(message) {
         document.body.innerHTML = `
@@ -74,6 +145,110 @@
                 ${message}
             </div>
         `;
+    }
+
+    function getCurrentLiffUrl() {
+        return window.location.href;
+    }
+
+    function buildFlexMessage() {
+        const liffUrl = getCurrentLiffUrl();
+
+        return {
+            type: "flex",
+            altText: "🎬 影片卡片",
+            contents: {
+                type: "bubble",
+                size: "giga",
+                hero: {
+                    type: "video",
+                    url: videoUrl,
+                    previewUrl: previewUrl,
+                    aspectRatio: aspectRatio,
+                    altContent: {
+                        type: "image",
+                        url: previewUrl,
+                        size: "full",
+                        aspectMode: "cover",
+                        aspectRatio: aspectRatio
+                    },
+                    action: {
+                        type: "uri",
+                        label: "播放影片",
+                        uri: videoUrl
+                    }
+                },
+                footer: {
+                    type: "box",
+                    layout: "vertical",
+                    spacing: "sm",
+                    contents: [
+                        {
+                            type: "button",
+                            style: "primary",
+                            height: "sm",
+                            action: {
+                                type: "uri",
+                                label: "打開滿版影片",
+                                uri: liffUrl
+                            }
+                        },
+                        {
+                            type: "button",
+                            style: "secondary",
+                            height: "sm",
+                            action: {
+                                type: "uri",
+                                label: "分享影片卡片",
+                                uri: liffUrl
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+    }
+
+    async function initLiff() {
+        try {
+            await liff.init({
+                liffId: LIFF_ID
+            });
+        } catch (error) {
+            showToast("LIFF 初始化失敗");
+        }
+    }
+
+    async function shareVideoCard() {
+        if (!videoUrl) {
+            showToast("沒有影片資料，無法分享");
+            return;
+        }
+
+        try {
+            if (!liff.isInClient()) {
+                showToast("請在 LINE 裡面開啟，才能分享影片卡片");
+                return;
+            }
+
+            if (!liff.isApiAvailable("shareTargetPicker")) {
+                showToast("你的 LINE 版本不支援分享選擇器");
+                return;
+            }
+
+            const result = await liff.shareTargetPicker([
+                buildFlexMessage()
+            ]);
+
+            if (result) {
+                showToast("已送出影片卡片");
+            } else {
+                showToast("已取消分享");
+            }
+
+        } catch (error) {
+            showToast("分享失敗，請再試一次");
+        }
     }
 
     if (!videoUrl) {
@@ -91,6 +266,7 @@
             loadingBox.style.display = "none";
             video.style.display = "block";
             hint.style.display = "block";
+            shareBar.style.display = "flex";
 
             video.play().catch(function () {});
         });
@@ -109,6 +285,20 @@
                 video.pause();
             }
         });
+
+        playBtn.addEventListener("click", function () {
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+        });
+
+        shareBtn.addEventListener("click", function () {
+            shareVideoCard();
+        });
+
+        initLiff();
     }
 </script>
 
