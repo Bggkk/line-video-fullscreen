@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>影片滿版播放</title>
+    <title>滿版播放</title>
 
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
@@ -19,11 +19,13 @@
             font-family: Arial, "Microsoft JhengHei", sans-serif;
         }
 
-        #videoPlayer {
+        #videoPlayer,
+        #imageViewer {
             width: 100vw;
             height: 100vh;
             background: #000;
             object-fit: cover;
+            display: none;
         }
 
         #loadingBox,
@@ -92,7 +94,7 @@
 </head>
 <body>
 
-<div id="loadingBox">影片載入中...</div>
+<div id="loadingBox">載入中...</div>
 
 <video
     id="videoPlayer"
@@ -100,14 +102,15 @@
     autoplay
     playsinline
     webkit-playsinline
-    style="display:none;"
 ></video>
+
+<img id="imageViewer" alt="滿版圖片">
 
 <div id="hint" style="display:none;">點一下影片可播放 / 暫停</div>
 
 <div id="shareBar">
     <button id="playBtn" class="btn">播放 / 暫停</button>
-    <button id="shareBtn" class="btn">分享影片卡片</button>
+    <button id="shareBtn" class="btn">分享卡片</button>
 </div>
 
 <div id="toast"></div>
@@ -143,13 +146,24 @@
 
     const params = getMergedParams();
 
-    const videoUrl = params.get("videoUrl");
+    let type = params.get("type") || "";
+    const videoUrl = params.get("videoUrl") || "";
+    const imageUrl = params.get("imageUrl") || "";
     const previewUrl = params.get("previewUrl") || "https://dummyimage.com/1280x720/000000/ffffff.png&text=VIDEO";
     const fit = params.get("fit") || "cover";
     const aspectRatio = params.get("aspectRatio") || "16:9";
 
+    if (!type) {
+        if (videoUrl) {
+            type = "video";
+        } else if (imageUrl) {
+            type = "image";
+        }
+    }
+
     const loadingBox = document.getElementById("loadingBox");
     const video = document.getElementById("videoPlayer");
+    const imageViewer = document.getElementById("imageViewer");
     const hint = document.getElementById("hint");
     const shareBar = document.getElementById("shareBar");
     const shareBtn = document.getElementById("shareBtn");
@@ -176,16 +190,23 @@
     function getLiffUrl() {
         const url = new URL("https://liff.line.me/" + LIFF_ID);
 
-        url.searchParams.set("type", "video");
-        url.searchParams.set("videoUrl", videoUrl);
-        url.searchParams.set("previewUrl", previewUrl);
+        url.searchParams.set("type", type);
         url.searchParams.set("aspectRatio", aspectRatio);
         url.searchParams.set("fit", fit);
+
+        if (type === "video") {
+            url.searchParams.set("videoUrl", videoUrl);
+            url.searchParams.set("previewUrl", previewUrl);
+        }
+
+        if (type === "image") {
+            url.searchParams.set("imageUrl", imageUrl);
+        }
 
         return url.toString();
     }
 
-    function buildFlexMessage() {
+    function buildVideoFlexMessage() {
         const liffUrl = getLiffUrl();
 
         return {
@@ -243,6 +264,66 @@
         };
     }
 
+    function buildImageFlexMessage() {
+        const liffUrl = getLiffUrl();
+
+        return {
+            type: "flex",
+            altText: "🖼️ 圖片卡片",
+            contents: {
+                type: "bubble",
+                size: "giga",
+                hero: {
+                    type: "image",
+                    url: imageUrl,
+                    size: "full",
+                    aspectMode: "cover",
+                    aspectRatio: aspectRatio,
+                    action: {
+                        type: "uri",
+                        label: "打開滿版圖片",
+                        uri: liffUrl
+                    }
+                },
+                footer: {
+                    type: "box",
+                    layout: "vertical",
+                    spacing: "sm",
+                    contents: [
+                        {
+                            type: "button",
+                            style: "primary",
+                            height: "sm",
+                            action: {
+                                type: "uri",
+                                label: "打開滿版圖片",
+                                uri: liffUrl
+                            }
+                        },
+                        {
+                            type: "button",
+                            style: "secondary",
+                            height: "sm",
+                            action: {
+                                type: "uri",
+                                label: "分享圖片卡片",
+                                uri: liffUrl
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+    }
+
+    function buildFlexMessage() {
+        if (type === "image") {
+            return buildImageFlexMessage();
+        }
+
+        return buildVideoFlexMessage();
+    }
+
     async function initLiff() {
         try {
             await liff.init({
@@ -253,15 +334,10 @@
         }
     }
 
-    async function shareVideoCard() {
-        if (!videoUrl) {
-            showToast("沒有影片資料，無法分享");
-            return;
-        }
-
+    async function shareCard() {
         try {
             if (!liff.isInClient()) {
-                showToast("請在 LINE 裡面開啟，才能分享影片卡片");
+                showToast("請在 LINE 裡面開啟，才能分享卡片");
                 return;
             }
 
@@ -275,7 +351,7 @@
             ]);
 
             if (result) {
-                showToast("已送出影片卡片");
+                showToast("已送出卡片");
             } else {
                 showToast("已取消分享");
             }
@@ -285,13 +361,17 @@
         }
     }
 
-    if (!videoUrl) {
-        showError(
-            "沒有影片網址<br>" +
-            "請從 LINE Bot 產生影片滿版連結<br><br>" +
-            "如果你是剛剛更新程式，請重新產生一張新的影片卡片。"
-        );
-    } else {
+    function setupVideo() {
+        if (!videoUrl) {
+            showError(
+                "沒有影片網址<br>" +
+                "請從 LINE Bot 產生影片滿版連結"
+            );
+            return;
+        }
+
+        loadingBox.innerHTML = "影片載入中...";
+
         video.src = videoUrl;
 
         if (fit === "contain") {
@@ -305,6 +385,8 @@
             video.style.display = "block";
             hint.style.display = "block";
             shareBar.style.display = "flex";
+            playBtn.style.display = "block";
+            shareBtn.innerHTML = "分享影片卡片";
 
             video.play().catch(function () {});
         });
@@ -331,12 +413,59 @@
                 video.pause();
             }
         });
+    }
 
-        shareBtn.addEventListener("click", function () {
-            shareVideoCard();
-        });
+    function setupImage() {
+        if (!imageUrl) {
+            showError(
+                "沒有圖片網址<br>" +
+                "請從 LINE Bot 產生圖片滿版連結"
+            );
+            return;
+        }
 
-        initLiff();
+        loadingBox.innerHTML = "圖片載入中...";
+
+        if (fit === "contain") {
+            imageViewer.style.objectFit = "contain";
+        } else {
+            imageViewer.style.objectFit = "cover";
+        }
+
+        imageViewer.onload = function () {
+            loadingBox.style.display = "none";
+            imageViewer.style.display = "block";
+            hint.style.display = "none";
+            shareBar.style.display = "flex";
+            playBtn.style.display = "none";
+            shareBtn.innerHTML = "分享圖片卡片";
+        };
+
+        imageViewer.onerror = function () {
+            showError(
+                "圖片載入失敗<br><br>" +
+                "請確認圖片網址是可直接開啟的 https 圖片網址"
+            );
+        };
+
+        imageViewer.src = imageUrl;
+    }
+
+    shareBtn.addEventListener("click", function () {
+        shareCard();
+    });
+
+    initLiff();
+
+    if (type === "image") {
+        setupImage();
+    } else if (type === "video") {
+        setupVideo();
+    } else {
+        showError(
+            "沒有指定滿版類型<br>" +
+            "請從 LINE Bot 產生圖片或影片滿版連結"
+        );
     }
 </script>
 
